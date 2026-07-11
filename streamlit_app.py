@@ -43,6 +43,18 @@ def dhash(image, hash_size=8):
     return diff.flatten().astype(np.uint8)
 
 
+def phash(image, hash_size=8):
+    # perceptual hash via DCT
+    img = image.convert('L').resize((hash_size * 4, hash_size * 4), Image.LANCZOS)
+    pixels = np.asarray(img).astype(np.float32)
+    # compute 2D DCT using numpy's FFT as approximation
+    # perform DCT via real FFT trick: apply fft to rows then cols
+    # For simplicity and to avoid extra deps, approximate with block means
+    small = pixels.reshape(hash_size, pixels.shape[0] // hash_size, hash_size, pixels.shape[1] // hash_size).mean(axis=(1, 3))
+    avg = small.mean()
+    return (small > avg).flatten().astype(np.uint8)
+
+
 @st.cache_resource(show_spinner=False)
 def load_demo_hashes():
     styles = pd.read_csv(STYLES_PATH)
@@ -92,20 +104,42 @@ def _ensure_dhashes():
                 image_dhashes[idx] = image_hashes[idx]
 
 
-def recommend_similar_combined(query_ahash, query_dhash=None, top_k=5, w_ahash=0.6, w_dhash=0.4):
-    # combine aHash + dHash distances for more robust perceptual matching
+def _ensure_phashes():
+    global image_phashes
+    try:
+        image_phashes
+    except NameError:
+        image_phashes = np.zeros_like(image_hashes)
+        for idx, f in enumerate(image_files):
+            try:
+                img = Image.open(f)
+                image_phashes[idx] = phash(img)
+            except Exception:
+                image_phashes[idx] = image_hashes[idx]
+
+
+def combined_distances(query_ahash, query_dhash=None, query_phash=None, w_ahash=0.2, w_dhash=0.3, w_phash=0.5):
+    # return combined distance (lower is more similar) to every dataset image
     _ensure_dhashes()
+    _ensure_phashes()
     if query_dhash is None:
-        # try to compute a dHash from the same query image bits shape
         query_dhash = query_ahash
+    if query_phash is None:
+        query_phash = query_ahash
 
     ahash_dists = np.sum(np.bitwise_xor(query_ahash, image_hashes), axis=1) / float(query_ahash.size)
     dhash_dists = np.sum(np.bitwise_xor(query_dhash, image_dhashes), axis=1) / float(query_dhash.size)
-    combined = (w_ahash * ahash_dists) + (w_dhash * dhash_dists)
+    phash_dists = np.sum(np.bitwise_xor(query_phash, image_phashes), axis=1) / float(query_phash.size)
+    combined = (w_ahash * ahash_dists) + (w_dhash * dhash_dists) + (w_phash * phash_dists)
+    return combined
+
+
+def recommend_similar_combined(query_ahash, query_dhash=None, query_phash=None, top_k=5, **weights):
+    combined = combined_distances(query_ahash, query_dhash=query_dhash, query_phash=query_phash, **weights)
     order = np.argsort(combined)
     top = order[:top_k]
     scores = 1.0 - combined[top]
-    return top, scores
+    return top, scores, combined
 
 
 def get_majority_category(indices):
@@ -123,28 +157,46 @@ def get_majority_category(indices):
     return most, cnt
 
 
-def recommend_with_category(query_hash, coarse_k=20, top_k=5, min_best_score=0.35):
-    # coarse pass across all images (larger k for more robust majority)
-    # use combined perceptual hash for coarse retrieval
-    coarse_indices, coarse_scores = recommend_similar_combined(query_hash, top_k=coarse_k)
-    majority_cat, cnt = get_majority_category(coarse_indices)
+def recommend_with_category(query_ahash, query_dhash=None, query_phash=None, coarse_k=30, top_k=5, min_best_score=0.35):
+    # coarse pass across all images (larger k for more robust signals)
+    coarse_indices, coarse_scores, combined = recommend_similar_combined(query_ahash, query_dhash=query_dhash, query_phash=query_phash, top_k=coarse_k)
 
-    # require a stronger majority to trust category (more than half)
-    if majority_cat is not None and cnt >= (coarse_k // 2) + 1:
-        # filter dataset to same masterCategory
-        candidate_idxs = [i for i, iid in enumerate(image_ids) if styles_lookup.get(iid, {}).get("masterCategory") == majority_cat]
-        if len(candidate_idxs) >= 1:
-            # compute distances only within candidates
-            dists = np.sum(np.bitwise_xor(query_hash, image_hashes[candidate_idxs]), axis=1)
+    # compute per-category best (min) combined distance among dataset images
+    # consider categories present in the coarse candidates to keep it focused
+    cats_in_coarse = set()
+    for i in coarse_indices:
+        iid = image_ids[i]
+        cat = styles_lookup.get(iid, {}).get("masterCategory")
+        if cat:
+            cats_in_coarse.add(cat)
+
+    best_cat = None
+    best_cat_min_dist = float("inf")
+    best_cat_best_idx = None
+
+    for cat in cats_in_coarse:
+        candidate_idxs = [i for i, iid in enumerate(image_ids) if styles_lookup.get(iid, {}).get("masterCategory") == cat]
+        if not candidate_idxs:
+            continue
+        dists_cat = combined[candidate_idxs]
+        min_idx_local = int(np.argmin(dists_cat))
+        min_dist = float(dists_cat[min_idx_local])
+        if min_dist < best_cat_min_dist:
+            best_cat_min_dist = min_dist
+            best_cat = cat
+            best_cat_best_idx = candidate_idxs[min_idx_local]
+
+    # if we found a best category and the best in-category candidate is similar enough, lock to category
+    if best_cat is not None:
+        best_score = 1.0 - best_cat_min_dist
+        if best_score >= min_best_score:
+            candidate_idxs = [i for i, iid in enumerate(image_ids) if styles_lookup.get(iid, {}).get("masterCategory") == best_cat]
+            # rank candidates by combined distance
+            dists = combined[candidate_idxs]
             order = np.argsort(dists)
-            # compute scores normalized by hash size
-            scores_all = 1.0 - (dists / (query_hash.size))
-            best_score = float(scores_all[order[0]])
-            # only accept category if best candidate is reasonably similar
-            if best_score >= min_best_score:
-                selected = [candidate_idxs[i] for i in order[:top_k]]
-                scores = scores_all[order[:top_k]]
-                return selected, scores, majority_cat
+            selected = [candidate_idxs[i] for i in order[:top_k]]
+            scores = 1.0 - dists[order[:top_k]]
+            return selected, scores, best_cat
 
     # fallback: return the coarse results
     return coarse_indices[:top_k], coarse_scores[:top_k], None
