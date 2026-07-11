@@ -213,11 +213,31 @@ if uploaded_file is not None:
 
     if st.button("Find Similar Products"):
         with st.spinner("Analyzing the image and finding demo catalog matches..."):
-            image = Image.open(uploaded_file)
-            query_hash = ahash(image)
-            top_indices, scores, majority_cat = recommend_with_category(query_hash, coarse_k=10, top_k=5)
-            if majority_cat:
-                st.info(f"Detected category: {majority_cat} — showing results from this category")
+            try:
+                image = Image.open(uploaded_file)
+                query_hash = ahash(image)
+                query_dhash = dhash(image)
+                query_phash = phash(image)
+
+                top_indices, scores, majority_cat = recommend_with_category(query_hash, query_dhash, query_phash, coarse_k=10, top_k=5)
+                if majority_cat:
+                    st.info(f"Detected category: {majority_cat} — showing results from this category")
+            except Exception as e:
+                import traceback
+                tb = traceback.format_exc()
+                st.error("An error occurred during recommendation. See details below.")
+                st.code(tb)
+                # also log some diagnostics
+                try:
+                    st.write({
+                        "n_images": len(image_files),
+                        "image_hashes_shape": getattr(image_hashes, 'shape', None),
+                        "image_dhashes_defined": 'image_dhashes' in globals(),
+                        "image_phashes_defined": 'image_phashes' in globals(),
+                    })
+                except Exception:
+                    pass
+                top_indices, scores = [], []
 
         st.subheader("Top Similar Products")
         cols = st.columns(min(5, len(top_indices)))
