@@ -84,22 +84,27 @@ def get_majority_category(indices):
     return most, cnt
 
 
-def recommend_with_category(query_hash, coarse_k=10, top_k=5):
-    # coarse pass across all images
+def recommend_with_category(query_hash, coarse_k=20, top_k=5, min_best_score=0.35):
+    # coarse pass across all images (larger k for more robust majority)
     coarse_indices, coarse_scores = recommend_similar_hash(query_hash, top_k=coarse_k)
     majority_cat, cnt = get_majority_category(coarse_indices)
 
-    # require a strict majority to trust category (more than half)
+    # require a stronger majority to trust category (more than half)
     if majority_cat is not None and cnt >= (coarse_k // 2) + 1:
-        # filter candidates to same masterCategory
+        # filter dataset to same masterCategory
         candidate_idxs = [i for i, iid in enumerate(image_ids) if styles_lookup.get(iid, {}).get("masterCategory") == majority_cat]
         if len(candidate_idxs) >= 1:
             # compute distances only within candidates
             dists = np.sum(np.bitwise_xor(query_hash, image_hashes[candidate_idxs]), axis=1)
             order = np.argsort(dists)
-            selected = [candidate_idxs[i] for i in order[:top_k]]
-            scores = 1.0 - (dists[order[:top_k]] / (query_hash.size))
-            return selected, scores, majority_cat
+            # compute scores normalized by hash size
+            scores_all = 1.0 - (dists / (query_hash.size))
+            best_score = float(scores_all[order[0]])
+            # only accept category if best candidate is reasonably similar
+            if best_score >= min_best_score:
+                selected = [candidate_idxs[i] for i in order[:top_k]]
+                scores = scores_all[order[:top_k]]
+                return selected, scores, majority_cat
 
     # fallback: return the coarse results
     return coarse_indices[:top_k], coarse_scores[:top_k], None
