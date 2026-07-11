@@ -166,7 +166,11 @@ def get_majority_category(indices):
 
 def recommend_with_category(query_ahash, query_dhash=None, query_phash=None, coarse_k=30, top_k=5, min_best_score=0.35):
     # coarse pass across all images (larger k for more robust signals)
-    coarse_indices, coarse_scores, combined = recommend_similar_combined(query_ahash, query_dhash=query_dhash, query_phash=query_phash, top_k=coarse_k)
+    # compute combined distances for the whole dataset, then pick top-k as coarse candidates
+    combined = combined_distances(query_ahash, query_dhash=query_dhash, query_phash=query_phash)
+    order_all = np.argsort(combined)
+    coarse_indices = order_all[:coarse_k]
+    coarse_scores = 1.0 - combined[coarse_indices]
 
     # compute per-category best (min) combined distance among dataset images
     # consider categories present in the coarse candidates to keep it focused
