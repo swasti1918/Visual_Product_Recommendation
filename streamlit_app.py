@@ -1,6 +1,8 @@
 import os
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LogisticRegression
 import streamlit as st
 
 from PIL import Image, ImageOps
@@ -123,6 +125,66 @@ def _ensure_phashes():
                         image_phashes[idx] = ahash(tmp)
                 except Exception:
                     image_phashes[idx] = image_hashes[idx]
+
+
+        def extract_features(image, hist_bins=8, size=(64, 64)):
+            # Resize and compute simple features: HSV hist (hist_bins per channel), aspect ratio, mean brightness
+            try:
+                img = image.convert('RGB').resize(size, Image.LANCZOS)
+                arr = np.asarray(img).astype(np.float32) / 255.0
+                # RGB -> HSV
+                r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+                maxc = np.maximum(np.maximum(r, g), b)
+                minc = np.minimum(np.minimum(r, g), b)
+                v = maxc
+                s = (maxc - minc) / (maxc + 1e-8)
+                # hue omitted; use simple channel histograms instead to avoid angle wrap
+                feats = []
+                for ch in range(3):
+                    h, _ = np.histogram(arr[..., ch], bins=hist_bins, range=(0.0, 1.0))
+                    feats.append(h.astype(np.float32) / (h.sum() + 1e-8))
+                feats = np.concatenate(feats)
+                # aspect ratio (height/width)
+                w, h = image.size
+                feats = np.concatenate([feats, np.array([h / (w + 1e-8), v.mean()])])
+                return feats
+            except Exception:
+                return np.zeros(hist_bins * 3 + 2, dtype=np.float32)
+
+
+        @st.cache_resource(show_spinner=False)
+        def train_category_model():
+            # Train a tiny logistic regression on the demo images' simple features
+            X = []
+            y = []
+            for iid, img_path in zip(image_ids, image_files):
+                meta = styles_lookup.get(iid, {})
+                cat = meta.get('masterCategory')
+                if not cat:
+                    continue
+                try:
+                    with Image.open(img_path) as im:
+                        X.append(extract_features(im))
+                        y.append(cat)
+                except Exception:
+                    continue
+            if len(X) < 3:
+                return None, None
+            X = np.vstack(X)
+            le = LabelEncoder()
+            y_enc = le.fit_transform(y)
+            clf = LogisticRegression(max_iter=200, solver='liblinear')
+            clf.fit(X, y_enc)
+            return clf, le
+
+
+        def predict_category_for_image(image):
+            clf, le = train_category_model()
+            if clf is None:
+                return None
+            feats = extract_features(image)
+            pred = clf.predict(feats.reshape(1, -1))[0]
+            return le.inverse_transform([pred])[0]
 
 
 def combined_distances(query_ahash, query_dhash=None, query_phash=None, w_ahash=0.2, w_dhash=0.3, w_phash=0.5):
