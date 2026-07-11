@@ -5,20 +5,19 @@ import streamlit as st
 
 from PIL import Image, ImageOps
 from sklearn.metrics.pairwise import cosine_similarity
-from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
 
 # -----------------------------
 # Page Configuration
 # -----------------------------
 st.set_page_config(
-    page_title="Visual Product Recommender Demo",
+    page_title="Visual Product Recommendation Demo",
     page_icon="👕",
     layout="wide",
 )
 
 st.title("👕 Visual Product Recommendation Demo")
 st.write(
-    "This public demo uses a small sample catalog and pretrained ResNet50 features. "
+    "This public demo uses a lightweight image similarity model. "
     "Upload an image and see visually similar fashion products from the demo set."
 )
 
@@ -26,48 +25,47 @@ st.write(
 # Paths and Data
 # -----------------------------
 IMAGE_PATH = "data/demo_images_public"
-EMBEDDINGS_PATH = "embeddings/demo_image_embeddings_public.npy"
-IMAGE_IDS_PATH = "embeddings/demo_image_ids_public.npy"
 STYLES_PATH = "data/demo_subset_public.csv"
 
 
+def image_feature_vector(image: Image.Image, bins=8):
+    image = image.resize((224, 224)).convert("RGB")
+    hist = np.array([])
+    for channel in range(3):
+        channel_data = np.array(image)[:, :, channel]
+        hist_channel, _ = np.histogram(channel_data, bins=bins, range=(0, 256), density=True)
+        hist = np.concatenate([hist, hist_channel])
+    return hist
+
+
 @st.cache_resource(show_spinner=False)
-def load_recommender():
-    feature_extractor = ResNet50(
-        weights="imagenet",
-        include_top=False,
-        pooling="avg",
-    )
-
-    embeddings = np.load(EMBEDDINGS_PATH)
-    image_ids = np.load(IMAGE_IDS_PATH, allow_pickle=True)
-
+def load_demo_data():
     styles = pd.read_csv(STYLES_PATH)
     styles["id"] = styles["id"].astype(str)
     styles_lookup = styles.set_index("id").to_dict(orient="index")
 
-    return feature_extractor, embeddings, image_ids, styles_lookup
+    image_files = []
+    image_vectors = []
+    image_ids = []
+
+    for image_id in styles["id"]:
+        image_name = f"{image_id}.webp"
+        image_path = os.path.join(IMAGE_PATH, image_name)
+        if os.path.exists(image_path):
+            image_files.append(image_path)
+            image_ids.append(image_id)
+            with Image.open(image_path) as img:
+                image_vectors.append(image_feature_vector(img))
+
+    image_vectors = np.vstack(image_vectors)
+    return styles_lookup, image_ids, image_files, image_vectors
 
 
-feature_extractor, embeddings, image_ids, styles_lookup = load_recommender()
+styles_lookup, image_ids, image_files, image_vectors = load_demo_data()
 
 
-# -----------------------------
-# Helper Functions
-# -----------------------------
-
-def preprocess_image(uploaded_file):
-    image = Image.open(uploaded_file)
-    image = ImageOps.exif_transpose(image).convert("RGB")
-    image = image.resize((224, 224))
-    image_array = np.asarray(image, dtype=np.float32)
-    image_array = np.expand_dims(image_array, axis=0)
-    image_array = preprocess_input(image_array)
-    return image_array
-
-
-def recommend_similar(query_embedding, top_k=5):
-    similarity = cosine_similarity(query_embedding, embeddings)[0]
+def recommend_similar(query_vector, top_k=5):
+    similarity = cosine_similarity(query_vector.reshape(1, -1), image_vectors)[0]
     top_indices = np.argsort(similarity)[::-1][:top_k]
     return top_indices, similarity[top_indices]
 
@@ -83,18 +81,16 @@ if uploaded_file is not None:
 
     if st.button("Find Similar Products"):
         with st.spinner("Analyzing the image and finding demo catalog matches..."):
-            query_embedding = feature_extractor.predict(
-                preprocess_image(uploaded_file),
-                verbose=0,
-            )
-            top_indices, scores = recommend_similar(query_embedding)
+            image = Image.open(uploaded_file)
+            query_vector = image_feature_vector(image)
+            top_indices, scores = recommend_similar(query_vector)
 
         st.subheader("Top Similar Products")
         cols = st.columns(min(5, len(top_indices)))
 
         for col, idx, score in zip(cols, top_indices, scores):
-            image_id = int(image_ids[idx])
-            product = styles_lookup.get(str(image_id), {})
+            image_id = image_ids[idx]
+            product = styles_lookup.get(image_id, {})
             image_name = f"{image_id}.webp"
             image_path = os.path.join(IMAGE_PATH, image_name)
             title = product.get("productDisplayName", image_name)
