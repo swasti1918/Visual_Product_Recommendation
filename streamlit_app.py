@@ -210,6 +210,9 @@ uploaded_file = st.file_uploader("Upload a product image", type=["jpg", "jpeg", 
 if uploaded_file is not None:
     st.subheader("Uploaded Image")
     st.image(uploaded_file, width="stretch")
+    # allow user to override automatic category selection
+    all_cats = sorted({v.get('masterCategory') for v in styles_lookup.values() if v.get('masterCategory')})
+    cat_choice = st.selectbox("Category (Auto = detect automatically)", options=['Auto'] + all_cats)
 
     if st.button("Find Similar Products"):
         with st.spinner("Analyzing the image and finding demo catalog matches..."):
@@ -219,9 +222,22 @@ if uploaded_file is not None:
                 query_dhash = dhash(image)
                 query_phash = phash(image)
 
+                forced_cat = None if cat_choice == 'Auto' else cat_choice
                 top_indices, scores, majority_cat = recommend_with_category(query_hash, query_dhash, query_phash, coarse_k=10, top_k=5)
-                if majority_cat:
-                    st.info(f"Detected category: {majority_cat} — showing results from this category")
+                if forced_cat:
+                    st.info(f"Category forced to: {forced_cat} — showing results from this category")
+                    # re-rank within forced category
+                    candidate_idxs = [i for i, iid in enumerate(image_ids) if styles_lookup.get(iid, {}).get('masterCategory') == forced_cat]
+                    if candidate_idxs:
+                        combined = combined_distances(query_hash, query_dhash=query_dhash, query_phash=query_phash)
+                        dists = combined[candidate_idxs]
+                        order = np.argsort(dists)
+                        selected = [candidate_idxs[i] for i in order[:5]]
+                        scores = 1.0 - dists[order[:5]]
+                        top_indices = selected
+                else:
+                    if majority_cat:
+                        st.info(f"Detected category: {majority_cat} — showing results from this category")
             except Exception as e:
                 import traceback
                 tb = traceback.format_exc()
