@@ -44,15 +44,17 @@ def dhash(image, hash_size=8):
 
 
 def phash(image, hash_size=8):
-    # perceptual hash via DCT
-    img = image.convert('L').resize((hash_size * 4, hash_size * 4), Image.LANCZOS)
-    pixels = np.asarray(img).astype(np.float32)
-    # compute 2D DCT using numpy's FFT as approximation
-    # perform DCT via real FFT trick: apply fft to rows then cols
-    # For simplicity and to avoid extra deps, approximate with block means
-    small = pixels.reshape(hash_size, pixels.shape[0] // hash_size, hash_size, pixels.shape[1] // hash_size).mean(axis=(1, 3))
-    avg = small.mean()
-    return (small > avg).flatten().astype(np.uint8)
+    # perceptual hash (robust, but implemented simply to avoid extra deps)
+    # Resize to a fixed small grid and threshold by mean. This avoids reshape
+    # errors when input sizes aren't divisible by block size.
+    try:
+        img = image.convert('L').resize((hash_size, hash_size), Image.LANCZOS)
+        small = np.asarray(img).astype(np.float32)
+        avg = small.mean()
+        return (small > avg).flatten().astype(np.uint8)
+    except Exception:
+        # fallback to aHash bits if anything goes wrong
+        return ahash(image, hash_size=hash_size)
 
 
 @st.cache_resource(show_spinner=False)
@@ -115,7 +117,12 @@ def _ensure_phashes():
                 img = Image.open(f)
                 image_phashes[idx] = phash(img)
             except Exception:
-                image_phashes[idx] = image_hashes[idx]
+                # fallback to aHash for that image
+                try:
+                    with Image.open(f) as tmp:
+                        image_phashes[idx] = ahash(tmp)
+                except Exception:
+                    image_phashes[idx] = image_hashes[idx]
 
 
 def combined_distances(query_ahash, query_dhash=None, query_phash=None, w_ahash=0.2, w_dhash=0.3, w_phash=0.5):
