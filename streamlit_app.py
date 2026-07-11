@@ -69,6 +69,42 @@ def recommend_similar_hash(query_hash, top_k=5):
     return top_indices, scores
 
 
+def get_majority_category(indices):
+    from collections import Counter
+    cats = []
+    for i in indices:
+        iid = image_ids[i]
+        meta = styles_lookup.get(iid, {})
+        cat = meta.get("masterCategory")
+        if cat:
+            cats.append(cat)
+    if not cats:
+        return None, 0
+    most, cnt = Counter(cats).most_common(1)[0]
+    return most, cnt
+
+
+def recommend_with_category(query_hash, coarse_k=10, top_k=5):
+    # coarse pass across all images
+    coarse_indices, coarse_scores = recommend_similar_hash(query_hash, top_k=coarse_k)
+    majority_cat, cnt = get_majority_category(coarse_indices)
+
+    # require a strict majority to trust category (more than half)
+    if majority_cat is not None and cnt >= (coarse_k // 2) + 1:
+        # filter candidates to same masterCategory
+        candidate_idxs = [i for i, iid in enumerate(image_ids) if styles_lookup.get(iid, {}).get("masterCategory") == majority_cat]
+        if len(candidate_idxs) >= 1:
+            # compute distances only within candidates
+            dists = np.sum(np.bitwise_xor(query_hash, image_hashes[candidate_idxs]), axis=1)
+            order = np.argsort(dists)
+            selected = [candidate_idxs[i] for i in order[:top_k]]
+            scores = 1.0 - (dists[order[:top_k]] / (query_hash.size))
+            return selected, scores, majority_cat
+
+    # fallback: return the coarse results
+    return coarse_indices[:top_k], coarse_scores[:top_k], None
+
+
 # -----------------------------
 # UI
 # -----------------------------
@@ -82,7 +118,9 @@ if uploaded_file is not None:
         with st.spinner("Analyzing the image and finding demo catalog matches..."):
             image = Image.open(uploaded_file)
             query_hash = ahash(image)
-            top_indices, scores = recommend_similar_hash(query_hash)
+            top_indices, scores, majority_cat = recommend_with_category(query_hash, coarse_k=10, top_k=5)
+            if majority_cat:
+                st.info(f"Detected category: {majority_cat} — showing results from this category")
 
         st.subheader("Top Similar Products")
         cols = st.columns(min(5, len(top_indices)))
