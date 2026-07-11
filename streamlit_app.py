@@ -34,12 +34,13 @@ def ahash(image: Image.Image, hash_size=8):
     avg = pixels.mean()
     return (pixels > avg).flatten()
 
-    def dhash(image, hash_size=8):
-        # difference hash (more robust to luminance changes than aHash)
-        img = image.convert('L').resize((hash_size + 1, hash_size), Image.LANCZOS)
-        arr = np.asarray(img)
-        diff = arr[:, 1:] > arr[:, :-1]
-        return diff.flatten().astype(np.uint8)
+
+def dhash(image, hash_size=8):
+    # difference hash (more robust to luminance changes than aHash)
+    img = image.convert('L').resize((hash_size + 1, hash_size), Image.LANCZOS)
+    arr = np.asarray(img)
+    diff = arr[:, 1:] > arr[:, :-1]
+    return diff.flatten().astype(np.uint8)
 
 
 @st.cache_resource(show_spinner=False)
@@ -75,34 +76,36 @@ def recommend_similar_hash(query_hash, top_k=5):
     scores = 1.0 - (dists[top_indices] / (query_hash.size))
     return top_indices, scores
 
-    def _ensure_dhashes():
-        global image_dhashes
-        try:
-            image_dhashes
-        except NameError:
-            # compute d-hashes for dataset images (lazy)
-            image_dhashes = np.zeros_like(image_hashes)
-            for idx, f in enumerate(image_files):
-                try:
-                    img = Image.open(f)
-                    image_dhashes[idx] = dhash(img)
-                except Exception:
-                    image_dhashes[idx] = image_hashes[idx]
 
-    def recommend_similar_combined(query_ahash, query_dhash=None, top_k=5, w_ahash=0.6, w_dhash=0.4):
-        # combine aHash + dHash distances for more robust perceptual matching
-        _ensure_dhashes()
-        if query_dhash is None:
-            # try to compute a dHash from the same query image bits shape
-            query_dhash = query_ahash
+def _ensure_dhashes():
+    global image_dhashes
+    try:
+        image_dhashes
+    except NameError:
+        # compute d-hashes for dataset images (lazy)
+        image_dhashes = np.zeros_like(image_hashes)
+        for idx, f in enumerate(image_files):
+            try:
+                img = Image.open(f)
+                image_dhashes[idx] = dhash(img)
+            except Exception:
+                image_dhashes[idx] = image_hashes[idx]
 
-        ahash_dists = np.sum(np.bitwise_xor(query_ahash, image_hashes), axis=1) / float(query_ahash.size)
-        dhash_dists = np.sum(np.bitwise_xor(query_dhash, image_dhashes), axis=1) / float(query_dhash.size)
-        combined = (w_ahash * ahash_dists) + (w_dhash * dhash_dists)
-        order = np.argsort(combined)
-        top = order[:top_k]
-        scores = 1.0 - combined[top]
-        return top, scores
+
+def recommend_similar_combined(query_ahash, query_dhash=None, top_k=5, w_ahash=0.6, w_dhash=0.4):
+    # combine aHash + dHash distances for more robust perceptual matching
+    _ensure_dhashes()
+    if query_dhash is None:
+        # try to compute a dHash from the same query image bits shape
+        query_dhash = query_ahash
+
+    ahash_dists = np.sum(np.bitwise_xor(query_ahash, image_hashes), axis=1) / float(query_ahash.size)
+    dhash_dists = np.sum(np.bitwise_xor(query_dhash, image_dhashes), axis=1) / float(query_dhash.size)
+    combined = (w_ahash * ahash_dists) + (w_dhash * dhash_dists)
+    order = np.argsort(combined)
+    top = order[:top_k]
+    scores = 1.0 - combined[top]
+    return top, scores
 
 
 def get_majority_category(indices):
