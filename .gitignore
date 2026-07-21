@@ -1,28 +1,8 @@
-# Python
+.venv/
+.idea/
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.env
-*.venv
-env/
-venv/
 
-# Data files
-data/fashion-dataset/
+images/
 
-# Models and large files
-models/
-embeddings/*.npy
-!embeddings/demo_image_embeddings_public.npy
-!embeddings/demo_image_ids_public.npy
 
-# Public demo assets
-!data/demo_subset_public.csv
-!data/demo_images_public/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# System
-.DS_Store
+*.pyc
