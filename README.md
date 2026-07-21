@@ -1,91 +1,228 @@
-# Visual Product Recommendation System
+# 🛍️ Visual Product Recommender System
 
-[![Live Demo](https://img.shields.io/badge/🚀%20Live%20Demo-Streamlit-red?style=for-the-badge)](https://visualappuctrecommendation-jqitqky4yzkdghulenvxdy.streamlit.app)
+A Deep Learning-based **Visual Product Recommender System** that recommends visually similar products based on an uploaded image. The system extracts deep visual features using a pre-trained **ResNet50** model and retrieves the most similar products using the **K-Nearest Neighbors (KNN)** algorithm with **Cosine Similarity**.
 
-## Overview
+This project demonstrates the practical application of **Computer Vision**, **Deep Learning**, and **Image Similarity Search** for product recommendation.
 
-This project recommends visually similar fashion products using Deep Learning. It compares a baseline image embedding approach with a Siamese Network to improve recommendation quality.
+---
 
-## Features
+# 📸 Project Output
 
-- Image preprocessing
-- Exploratory Data Analysis (EDA)
-- Feature extraction using ResNet50
-- Baseline recommendation system
-- Siamese Network for improved embeddings
-- Cosine similarity-based recommendations
-- Streamlit web application
+![Project Output](Output.png)
 
-## Project Structure
+---
 
-```
-Visual_Product_Recommender/
-│── data/
-│── embeddings/
-│── models/
-│── results/
-│── Base Line recomm.ipynb
-│── Dataset Preparation.ipynb
-│── EDA.ipynb
-│── Evaluate Baseline.ipynb
-│── Generate image embedding.ipynb
-│── Generate New Embeddings.ipynb
-│── Improve Recommendation.ipynb
-│── Siamese Network.ipynb
-│── Transfer Learning.ipynb
-│── Compare Results.ipynb
-│── Streamlit App.ipynb
-│── app.py
-│── requirements.txt
-│── README.md
-```
+---
 
-## Technologies Used
+# 🌐 Live Demo
+
+🔗 https://visualappuctrecommendersystem-dt8apaxvnqw67vafjskbnh.streamlit.app/..
+
+---
+
+
+# 🚀 Features
+
+- Upload an image through a Streamlit web interface
+- Deep feature extraction using ResNet50
+- Automatic image preprocessing
+- Generate normalized feature embeddings
+- Visual similarity search using K-Nearest Neighbors (KNN)
+- Cosine Similarity based recommendation
+- Display Top-5 visually similar products
+- Fast inference using precomputed embeddings
+- Interactive and user-friendly interface
+
+---
+
+# 🛠️ Tech Stack
 
 - Python
 - TensorFlow / Keras
+- ResNet50 (Pre-trained CNN)
 - NumPy
-- Pandas
-- Scikit-learn
-- Matplotlib
-- Pillow
+- Scikit-learn (KNN)
 - Streamlit
+- Pillow (PIL)
+- Pickle
+- tqdm
 
-## Dataset
+---
 
-This project is based on the **Fashion Product Images Dataset** from Kaggle.
+# 📂 Project Structure
 
-**Dataset Link:**  
-🔗 :contentReference[oaicite:0]{index=0}
+```text
+Visual_Product_Recommender_System/
+│
+├── images_small/
+├── uploads/
+├── app.py
+├── main.py
+├── test.py
+├── generate_embeddings.py
+├── embeddings.pkl
+├── filenames.pkl
+├── requirements.txt
+├── Output.png
+├── README.md
+└── .gitignore
+```
 
-> **Note:**  
-> The deployed Streamlit application uses a **small dummy dataset** to reduce storage requirements and improve deployment speed. Therefore, the recommendations shown in the live demo may not be as accurate or diverse as those generated using the complete dataset.
+---
 
-To achieve the best recommendation quality:
+# ⚙️ Installation
 
-1. Download the complete dataset from the Kaggle link above.
-2. Replace the contents of the `data/` folder with the downloaded dataset.
-3. Regenerate the image embeddings.
-4. Restart the Streamlit application.
+Clone the repository
 
-Using the full dataset significantly improves the quality and relevance of the recommended products. :contentReference[oaicite:1]{index=1}
+```bash
+git clone https://github.com/saloni1709/Visual_Recommender_System.git
+```
 
-## Results
+Go to the project folder
 
-- Implemented a baseline recommendation system using image embeddings.
-- Improved recommendation quality using a Siamese Network.
-- Generated visually similar fashion product recommendations.
+```bash
+cd Visual_Recommender_System
+```
 
-## Future Improvements
-
-- Deploy on Streamlit Cloud
-- Use Vision Transformers (ViT)
-- Add text-based search
-- Hybrid recommendation system
-
-## Run the Project
+Install dependencies
 
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
 ```
+
+---
+
+# ▶️ Run the Project
+
+### Step 1: Generate Embeddings
+
+```bash
+python generate_embeddings.py
+```
+
+This creates:
+
+- embeddings.pkl
+- filenames.pkl
+
+### Step 2: Start the Streamlit Application
+
+```bash
+streamlit run main.py
+```
+
+---
+
+# 🧠 Working
+
+1. Upload a product image.
+2. The image is resized to **224 × 224**.
+3. ResNet50 extracts deep visual features.
+4. Features are normalized to create embeddings.
+5. KNN compares the uploaded image with stored embeddings using Cosine Similarity.
+6. The system retrieves the Top-5 visually similar products.
+7. Recommended products are displayed in the Streamlit interface.
+
+---
+
+# 🔄 Workflow
+
+```text
+Input Image
+      │
+      ▼
+Image Preprocessing
+      │
+      ▼
+ResNet50 Feature Extraction
+      │
+      ▼
+Feature Embedding
+      │
+      ▼
+KNN + Cosine Similarity
+      │
+      ▼
+Top-5 Similar Products
+```
+
+---
+
+# 🤖 Machine Learning Model
+
+### Feature Extraction
+
+- ResNet50 (ImageNet Pre-trained)
+- GlobalMaxPooling2D
+
+### Similarity Search
+
+- K-Nearest Neighbors (KNN)
+- Cosine Similarity
+
+---
+
+# 📊 Dataset
+
+This project uses a **small subset** of a Fashion Product Images dataset (`images_small`) for demonstration purposes.
+
+A reduced dataset was used to:
+
+- Reduce repository size
+- Speed up embedding generation
+- Enable faster testing and deployment
+
+The same pipeline can be applied to the complete dataset without major code changes.
+
+---
+
+# 📈 Current Implementation
+
+✔ Streamlit Web Interface
+
+✔ Image Upload
+
+✔ ResNet50 Feature Extraction
+
+✔ Image Embeddings Generation
+
+✔ KNN-based Recommendation
+
+✔ Cosine Similarity Search
+
+✔ Top-5 Product Recommendation
+
+---
+
+# ⚠️ Limitations
+
+- Uses a subset of the dataset.
+- Recommendations are based only on visual appearance.
+- Product metadata such as brand, price and description are not considered.
+- Siamese Network and FAISS are planned for future implementation.
+
+---
+
+# 👩‍💻 Author
+
+**Swasti Jain**
+
+B.Tech – Computer Science Engineering
+
+Poornima Institute of Engineering & Technology
+
+GitHub:
+https://github.com/swasti1918
+
+---
+
+# 🙏 Acknowledgements
+
+- TensorFlow
+- Keras
+- Streamlit
+- Scikit-learn
+- ImageNet
+- Fashion Product Images Dataset
+
+---
