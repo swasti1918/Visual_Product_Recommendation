@@ -1,6 +1,8 @@
-streamlit==1.59.1
-numpy
-pandas
-scikit-learn
-Pillow
-imagehash
+streamlit==1.46.1
+tensorflow==2.15.1
+numpy==1.26.4
+scikit-learn==1.5.2
+Pillow==11.3.0
+opencv-python-headless==4.10.0.84
+tqdm==4.67.1
+h5py==3.12.1
