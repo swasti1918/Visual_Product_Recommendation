@@ -16,7 +16,7 @@ This project demonstrates the practical application of **Computer Vision**, **De
 
 # 🌐 Live Demo
 
-🔗 [https://visualappuctrecommendersystem-dt8apaxvnqw67vafjskbnh.streamlit.app/..](https://visual-product-recommendation-v5ot.onrender.com)
+🔗 https://visualappuctrecommendersystem-dt8apaxvnqw67vafjskbnh.streamlit.app/
 
 ---
 
